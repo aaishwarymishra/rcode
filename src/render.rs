@@ -46,28 +46,28 @@ fn render_message_history(width: u16, app: &mut App, has_border: bool, padding: 
 
     let mut y = 0;
 
-    let mut block = Block::default().style(Style::default().bg(theme::SURFACE).fg(theme::TEXT));
-
-    if has_border {
-        let (label, accent) = match m.role {
-            Role::User => ("User", theme::USER),
-            Role::Agent => ("Agent", theme::AGENT),
-        };
-
-        block = block
-            .border_type(BorderType::Rounded)
-            .borders(Borders::ALL)
-            .border_style(accent)
-            .title(label)
-            .title_alignment(Alignment::Left)
-            .title_style(Style::default().fg(accent).bold());
-    }
-
     for m in &mut app.messages {
         let height = m.get_height(width, has_border);
 
+        let mut block = Block::default().style(Style::default().bg(theme::SURFACE).fg(theme::TEXT));
+
+        if has_border {
+            let (label, accent) = match m.role {
+                Role::User => ("User", theme::USER),
+                Role::Agent => ("Agent", theme::AGENT),
+            };
+
+            block = block
+                .border_type(BorderType::Rounded)
+                .borders(Borders::ALL)
+                .border_style(accent)
+                .title(label)
+                .title_alignment(Alignment::Left)
+                .title_style(Style::default().fg(accent).bold());
+        }
+
         let paragraph = Paragraph::new(m.content.as_str())
-            .block(block.clone().padding(Padding::new(padding, padding, 0, 0)));
+            .block(block.padding(Padding::new(padding, padding, 0, 0)));
 
         scroll_view.render_widget(paragraph, Rect::new(0, y, width, height));
         y += height;
