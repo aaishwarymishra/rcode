@@ -1,5 +1,6 @@
 mod render;
 mod states;
+mod theme;
 
 use crate::states::App;
 use crossterm::event;

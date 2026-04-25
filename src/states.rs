@@ -1,3 +1,4 @@
+use crate::theme;
 use ratatui::{prelude::*, widgets::*};
 use ratatui_textarea::TextArea;
 use textwrap::wrap;
@@ -82,8 +83,14 @@ impl App {
         let mut text_area = TextArea::default();
         let block = Block::bordered()
             .border_type(BorderType::Rounded)
-            .bg(Color::Black);
+            .border_style(theme::BORDER_LIGHT)
+            .style(Style::default().bg(theme::BACKGROUND).fg(theme::TEXT));
         text_area.set_block(block);
+        text_area.set_cursor_style(Style::default().bg(theme::BORDER_LIGHT).fg(theme::BACKGROUND));
+        text_area.set_cursor_line_style(Style::default().bg(theme::SURFACE_ALT));
+        text_area.set_selection_style(Style::default().bg(theme::SELECTION));
+        text_area.set_placeholder_text("Type a message...");
+        text_area.set_placeholder_style(Style::default().fg(theme::MUTED));
         text_area
     }
 

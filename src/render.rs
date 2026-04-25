@@ -1,29 +1,35 @@
+use crate::theme;
 use crate::states::{App, MessageUtils, Role};
 use ratatui::prelude::*;
-use ratatui::symbols::border;
 use ratatui::widgets::*;
 use tui_scrollview::ScrollView;
 
 pub fn render(frame: &mut ratatui::Frame, app: &mut App) {
     let block = Block::bordered()
-        .title("RCODE".cyan().bold().italic())
+        .title("RCODE")
         .title_alignment(Alignment::Center)
         .border_type(BorderType::Rounded)
-        .bg(Color::Black);
+        .border_style(theme::BORDER)
+        .title_style(Style::default().fg(theme::BORDER_LIGHT).bold().italic())
+        .style(Style::default().bg(theme::BACKGROUND).fg(theme::TEXT));
+
+    let inner = block.inner(frame.area());
 
     let chunks = Layout::default()
         .direction(Direction::Vertical)
-        .margin(1)
+        .margin(0)
         .constraints([
             Constraint::Length(2),
             Constraint::Min(1),
             Constraint::Max(5),
         ])
-        .split(frame.area());
+        .split(inner);
 
     frame.render_widget(block, frame.area());
     frame.render_widget(
-        Paragraph::new("Welcome to Ratatui!").block(Block::new().padding(Padding::left(1))),
+        Paragraph::new("Rust-powered CLI coding agent")
+            .style(theme::MUTED)
+            .block(Block::new().padding(Padding::left(1))),
         chunks[0],
     );
     frame.render_stateful_widget(
@@ -46,25 +52,21 @@ fn render_message_history(width: u16, app: &mut App, has_border: bool, padding: 
     for m in &app.messages {
         let height = m.get_height(width, has_border);
 
-        let mut block = Block::default().bg(Color::Black);
+        let mut block = Block::default().style(Style::default().bg(theme::SURFACE).fg(theme::TEXT));
 
         if has_border {
-            block = block.border_type(BorderType::Rounded).borders(Borders::ALL);
+            let (label, accent) = match m.role {
+                Role::User => ("User", theme::USER),
+                Role::Agent => ("Agent", theme::AGENT),
+            };
 
-            match m.role {
-                Role::User => {
-                    block = block
-                        .title("User")
-                        .title_alignment(Alignment::Left)
-                        .border_style(Color::Green);
-                }
-                Role::Agent => {
-                    block = block
-                        .title("Agent")
-                        .title_alignment(Alignment::Left)
-                        .border_style(Color::Blue);
-                }
-            }
+            block = block
+                .border_type(BorderType::Rounded)
+                .borders(Borders::ALL)
+                .border_style(accent)
+                .title(label)
+                .title_alignment(Alignment::Left)
+                .title_style(Style::default().fg(accent).bold());
         }
 
         let paragraph = Paragraph::new(m.content.clone())
