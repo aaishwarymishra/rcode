@@ -1,0 +1,13 @@
+[package]
+name = "rcode"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+crossterm = "0.29.0"
+openai_api_rust = "0.1.9"
+ratatui = "0.30.0"
+ratatui-textarea = "0.9.1"
+textwrap = "0.16.2"
+tokio = "1.52.1"
+tui-scrollview = "0.6.4"
