@@ -1,5 +1,5 @@
-use crate::theme;
 use crate::states::{App, MessageUtils, Role};
+use crate::theme;
 use ratatui::prelude::*;
 use ratatui::widgets::*;
 use tui_scrollview::ScrollView;
@@ -32,11 +32,8 @@ pub fn render(frame: &mut ratatui::Frame, app: &mut App) {
             .block(Block::new().padding(Padding::left(1))),
         chunks[0],
     );
-    frame.render_stateful_widget(
-        render_message_history(chunks[1].width, app, true, 1),
-        chunks[1],
-        &mut app.scroll_view_state,
-    );
+    let scroll_view = render_message_history(chunks[1].width, app, true, 1);
+    frame.render_stateful_widget(scroll_view, chunks[1], &mut app.scroll_view_state);
     frame.render_widget(&app.text_area, chunks[2]);
 }
 
@@ -49,28 +46,28 @@ fn render_message_history(width: u16, app: &mut App, has_border: bool, padding: 
 
     let mut y = 0;
 
-    for m in &app.messages {
+    let mut block = Block::default().style(Style::default().bg(theme::SURFACE).fg(theme::TEXT));
+
+    if has_border {
+        let (label, accent) = match m.role {
+            Role::User => ("User", theme::USER),
+            Role::Agent => ("Agent", theme::AGENT),
+        };
+
+        block = block
+            .border_type(BorderType::Rounded)
+            .borders(Borders::ALL)
+            .border_style(accent)
+            .title(label)
+            .title_alignment(Alignment::Left)
+            .title_style(Style::default().fg(accent).bold());
+    }
+
+    for m in &mut app.messages {
         let height = m.get_height(width, has_border);
 
-        let mut block = Block::default().style(Style::default().bg(theme::SURFACE).fg(theme::TEXT));
-
-        if has_border {
-            let (label, accent) = match m.role {
-                Role::User => ("User", theme::USER),
-                Role::Agent => ("Agent", theme::AGENT),
-            };
-
-            block = block
-                .border_type(BorderType::Rounded)
-                .borders(Borders::ALL)
-                .border_style(accent)
-                .title(label)
-                .title_alignment(Alignment::Left)
-                .title_style(Style::default().fg(accent).bold());
-        }
-
-        let paragraph = Paragraph::new(m.content.clone())
-            .block(block.padding(Padding::new(padding, padding, 0, 0)));
+        let paragraph = Paragraph::new(m.content.as_str())
+            .block(block.clone().padding(Padding::new(padding, padding, 0, 0)));
 
         scroll_view.render_widget(paragraph, Rect::new(0, y, width, height));
         y += height;
