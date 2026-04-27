@@ -1,2 +1,3 @@
 /target
 /src/openai_test.rs
+*.env

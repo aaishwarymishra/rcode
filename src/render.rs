@@ -21,6 +21,7 @@ pub fn render(frame: &mut ratatui::Frame, app: &mut App) {
         .constraints([
             Constraint::Length(2),
             Constraint::Min(1),
+            Constraint::Length(1),
             Constraint::Max(5),
         ])
         .split(inner);
@@ -34,7 +35,20 @@ pub fn render(frame: &mut ratatui::Frame, app: &mut App) {
     );
     let scroll_view = render_message_history(chunks[1].width, app, true, 1);
     frame.render_stateful_widget(scroll_view, chunks[1], &mut app.scroll_view_state);
-    frame.render_widget(&app.text_area, chunks[2]);
+
+    let status =
+        app.status
+            .as_deref()
+            .unwrap_or(if app.is_generating { "Thinking..." } else { "" });
+
+    frame.render_widget(
+        Paragraph::new(status)
+            .style(theme::MUTED)
+            .block(Block::new().padding(Padding::left(1))),
+        chunks[2],
+    );
+
+    frame.render_widget(&app.text_area, chunks[3]);
 }
 
 fn render_message_history(width: u16, app: &mut App, has_border: bool, padding: u16) -> ScrollView {

@@ -27,6 +27,8 @@ pub struct App {
     pub text_area: TextArea<'static>,
     pub messages: Vec<CliMessage>,
     pub scroll_view_state: ScrollViewState,
+    pub is_generating: bool,
+    pub status: Option<String>,
 }
 
 pub trait MessageUtils {
@@ -91,6 +93,8 @@ impl App {
             text_area: Self::create_text_area(),
             messages: dummy_messages,
             scroll_view_state: ScrollViewState::default(),
+            is_generating: false,
+            status: None,
         }
     }
 
@@ -100,6 +104,8 @@ impl App {
             text_area: Self::create_text_area(),
             messages: Vec::new(),
             scroll_view_state: ScrollViewState::default(),
+            is_generating: false,
+            status: None,
         }
     }
 
