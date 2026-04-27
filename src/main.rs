@@ -8,7 +8,6 @@ use rig::client::{CompletionClient, ProviderClient};
 use rig::completion::Prompt;
 use rig::providers::openai;
 use std::sync::mpsc::{self, Receiver, Sender};
-use std::thread;
 use std::time::Duration;
 
 // A small message enum lets the background worker talk back to the UI thread
@@ -18,7 +17,8 @@ enum AgentEvent {
     Error(String),
 }
 
-fn main() -> std::io::Result<()> {
+#[tokio::main]
+async fn main() -> std::io::Result<()> {
     // dotenvy reads .env and puts values into process environment variables.
     // After this, `openai::Client::from_env()` can find OPENAI_API_KEY.
     dotenvy::dotenv().ok();
@@ -35,7 +35,7 @@ fn run(terminal: &mut ratatui::DefaultTerminal) -> std::io::Result<()> {
         drain_agent_events(&mut app, &rx);
 
         // Draw only the current app state. The UI stays responsive because
-        // the network request happens on another thread.
+        // the network request happens in a background Tokio task.
         terminal.draw(|frame| render::render(frame, &mut app))?;
 
         // event::poll makes input non-blocking for a short period.
@@ -68,7 +68,7 @@ fn handle_input(app: &mut App, tx: &Sender<AgentEvent>) -> std::io::Result<()> {
                 app.is_generating = true;
                 app.status = Some("Thinking...".to_string());
 
-                // Spawn a worker thread so the UI thread never waits on the API.
+                // Start the request in the background so the UI thread never waits on the API.
                 spawn_agent_request(input, tx.clone());
             }
             _ => {
@@ -109,29 +109,26 @@ fn drain_agent_events(app: &mut App, rx: &Receiver<AgentEvent>) {
 }
 
 fn spawn_agent_request(prompt: String, tx: Sender<AgentEvent>) {
-    thread::spawn(move || {
-        let result = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .map_err(|error| error.to_string())
-            .and_then(|rt| {
-                rt.block_on(async move {
-                    // This client reads OPENAI_API_KEY from the environment.
-                    // We loaded .env in main(), so the key can live in a local file
-                    // instead of being hardcoded in the source.
-                    let client = openai::Client::from_env();
-                    let agent = client
-                        .agent("gpt-5-mini")
-                        .preamble("You are a helpful coding assistant inside a terminal UI. Keep responses concise and useful.")
-                        .build();
+    // Tokio runs this on a background worker, so the UI thread can keep
+    // drawing and reading keyboard input while the API request is in flight.
+    tokio::spawn(async move {
+        // This client reads OPENAI_API_KEY from the environment.
+        // We loaded .env in main(), so the key can live in a local file
+        // instead of being hardcoded in the source.
+        let client = openai::Client::from_env();
+        let agent = client
+            .agent("gpt-5-mini")
+            .preamble("You are a helpful coding assistant inside a terminal UI. Keep responses concise and useful.")
+            .build();
 
-                    agent.prompt(&prompt).await.map_err(|error| error.to_string())
-                })
-            });
+        let result = agent
+            .prompt(&prompt)
+            .await
+            .map_err(|error| error.to_string());
 
         let _ = match result {
             Ok(response) => tx.send(AgentEvent::Response(response)),
-            Err(error) => tx.send(AgentEvent::Error(error.to_string())),
+            Err(error) => tx.send(AgentEvent::Error(error)),
         };
     });
 }
