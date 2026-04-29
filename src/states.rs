@@ -1,17 +1,22 @@
 use crate::theme;
 use ratatui::{prelude::*, widgets::*};
 use ratatui_textarea::TextArea;
+use rig::completion::message::{AssistantContent, Message, ToolResultContent, UserContent};
 use textwrap::wrap;
 use tui_scrollview::ScrollViewState;
 
-#[derive(Debug, PartialEq, Eq)]
+#[allow(dead_code)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Role {
     User,
     Agent,
+    System,
 }
+
+#[derive(Debug)]
 pub struct CliMessage {
     pub role: Role,
-    pub content: String,
+    pub message: Message,
     cached_height: Option<HeightCache>,
 }
 
@@ -29,6 +34,80 @@ pub struct App {
     pub scroll_view_state: ScrollViewState,
     pub is_generating: bool,
     pub status: Option<String>,
+    pub model: Option<String>,
+}
+
+impl CliMessage {
+    pub fn new(role: Role, content: String) -> Self {
+        let message = match role {
+            Role::User => Message::user(content),
+            Role::Agent => Message::assistant(content),
+            Role::System => Message::system(content),
+        };
+
+        Self {
+            role,
+            message,
+            cached_height: None,
+        }
+    }
+
+    #[allow(dead_code)]
+    pub fn from_message(message: Message) -> Self {
+        let role = match &message {
+            Message::User { .. } => Role::User,
+            Message::Assistant { .. } => Role::Agent,
+            Message::System { .. } => Role::System,
+        };
+
+        Self {
+            role,
+            message,
+            cached_height: None,
+        }
+    }
+
+    pub fn get_content(&self) -> String {
+        match &self.message {
+            Message::System { content } => content.clone(),
+            Message::User { content } => content
+                .iter()
+                .filter_map(|item| match item {
+                    UserContent::Text(text) => Some(text.text.clone()),
+                    UserContent::ToolResult(result) => {
+                        let text = result
+                            .content
+                            .iter()
+                            .filter_map(|result_item| match result_item {
+                                ToolResultContent::Text(text) => Some(text.text.as_str()),
+                                ToolResultContent::Image(_) => None,
+                            })
+                            .collect::<Vec<_>>()
+                            .join("\n");
+
+                        if text.is_empty() { None } else { Some(text) }
+                    }
+                    UserContent::Image(_)
+                    | UserContent::Audio(_)
+                    | UserContent::Video(_)
+                    | UserContent::Document(_) => None,
+                })
+                .collect::<Vec<_>>()
+                .join("\n"),
+            Message::Assistant { content, .. } => content
+                .iter()
+                .filter_map(|item| match item {
+                    AssistantContent::Text(text) => Some(text.text.clone()),
+                    AssistantContent::Reasoning(reasoning) => {
+                        let text = reasoning.display_text();
+                        if text.is_empty() { None } else { Some(text) }
+                    }
+                    AssistantContent::ToolCall(_) | AssistantContent::Image(_) => None,
+                })
+                .collect::<Vec<_>>()
+                .join("\n"),
+        }
+    }
 }
 
 pub trait MessageUtils {
@@ -53,7 +132,8 @@ impl MessageUtils for CliMessage {
             }
         }
 
-        let lines = wrap(&self.content, width as usize);
+        let content = self.get_content();
+        let lines = wrap(&content, width as usize);
         let mut height = lines.len() as u16;
         if has_border {
             height += 2;
@@ -70,35 +150,8 @@ impl MessageUtils for CliMessage {
 }
 
 impl App {
-    pub fn dummy() -> Self {
-        let dummy_messages = vec![
-            CliMessage {
-                role: Role::User,
-                content: "Hello".to_string(),
-                cached_height: None,
-            },
-            CliMessage {
-                role: Role::Agent,
-                content: "How are you?".to_string(),
-                cached_height: None,
-            },
-            CliMessage {
-                role: Role::User,
-                content: "What is your name?".to_string(),
-                cached_height: None,
-            },
-        ];
-        Self {
-            exit: false,
-            text_area: Self::create_text_area(),
-            messages: dummy_messages,
-            scroll_view_state: ScrollViewState::default(),
-            is_generating: false,
-            status: None,
-        }
-    }
-
-    pub fn new() -> Self {
+    #[allow(dead_code)]
+    pub fn new(model: String) -> Self {
         Self {
             exit: false,
             text_area: Self::create_text_area(),
@@ -106,6 +159,7 @@ impl App {
             scroll_view_state: ScrollViewState::default(),
             is_generating: false,
             status: None,
+            model: Some(model),
         }
     }
 
@@ -129,11 +183,14 @@ impl App {
     }
 
     pub fn add_message(&mut self, role: Role, content: String) {
-        self.messages.push(CliMessage {
-            role,
-            content,
-            cached_height: None,
-        });
+        self.messages.push(CliMessage::new(role, content));
+    }
+
+    pub fn message_history(&self) -> Vec<Message> {
+        self.messages
+            .iter()
+            .map(|message| message.message.clone())
+            .collect()
     }
 
     pub fn take_input(&mut self) -> String {

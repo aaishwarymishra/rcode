@@ -69,6 +69,7 @@ fn render_message_history(width: u16, app: &mut App, has_border: bool, padding: 
             let (label, accent) = match m.role {
                 Role::User => ("User", theme::USER),
                 Role::Agent => ("Agent", theme::AGENT),
+                Role::System => ("System", theme::MUTED),
             };
 
             block = block
@@ -80,7 +81,8 @@ fn render_message_history(width: u16, app: &mut App, has_border: bool, padding: 
                 .title_style(Style::default().fg(accent).bold());
         }
 
-        let paragraph = Paragraph::new(m.content.as_str())
+        let content = m.get_content();
+        let paragraph = Paragraph::new(content.as_str())
             .block(block.padding(Padding::new(padding, padding, 0, 0)));
 
         scroll_view.render_widget(paragraph, Rect::new(0, y, width, height));

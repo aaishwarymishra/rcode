@@ -5,8 +5,10 @@ mod theme;
 use crate::states::App;
 use crossterm::event;
 use rig::client::{CompletionClient, ProviderClient};
-use rig::completion::Prompt;
+use rig::completion::{Chat, Message};
 use rig::providers::openai;
+use rig::providers::openai::responses_api::ResponsesCompletionModel;
+use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::time::Duration;
 
@@ -26,8 +28,9 @@ async fn main() -> std::io::Result<()> {
 }
 
 fn run(terminal: &mut ratatui::DefaultTerminal) -> std::io::Result<()> {
-    let mut app = App::dummy();
+    let mut app = App::new("gpt-5-mini".to_string());
     let (tx, rx) = mpsc::channel::<AgentEvent>();
+    let agent = Arc::new(create_openai_agent(&app));
 
     loop {
         // Poll the channel first so any finished agent reply shows up before
@@ -41,7 +44,7 @@ fn run(terminal: &mut ratatui::DefaultTerminal) -> std::io::Result<()> {
         // event::poll makes input non-blocking for a short period.
         // That gives us a chance to redraw the screen even when the user is idle.
         if event::poll(Duration::from_millis(30))? {
-            handle_input(&mut app, &tx)?;
+            handle_input(&mut app, &tx, agent.clone())?;
         }
 
         drain_agent_events(&mut app, &rx);
@@ -52,7 +55,11 @@ fn run(terminal: &mut ratatui::DefaultTerminal) -> std::io::Result<()> {
     }
 }
 
-fn handle_input(app: &mut App, tx: &Sender<AgentEvent>) -> std::io::Result<()> {
+fn handle_input(
+    app: &mut App,
+    tx: &Sender<AgentEvent>,
+    agent: Arc<rig::agent::Agent<ResponsesCompletionModel>>,
+) -> std::io::Result<()> {
     match event::read()? {
         event::Event::Key(key) => match key.code {
             event::KeyCode::Down => app.scroll_view_state.scroll_down(),
@@ -69,7 +76,8 @@ fn handle_input(app: &mut App, tx: &Sender<AgentEvent>) -> std::io::Result<()> {
                 app.status = Some("Thinking...".to_string());
 
                 // Start the request in the background so the UI thread never waits on the API.
-                spawn_agent_request(input, tx.clone());
+                let message_history = app.message_history();
+                spawn_agent_request(input, tx.clone(), agent, message_history);
             }
             _ => {
                 if key.modifiers.contains(event::KeyModifiers::CONTROL)
@@ -108,21 +116,22 @@ fn drain_agent_events(app: &mut App, rx: &Receiver<AgentEvent>) {
     }
 }
 
-fn spawn_agent_request(prompt: String, tx: Sender<AgentEvent>) {
-    // Tokio runs this on a background worker, so the UI thread can keep
-    // drawing and reading keyboard input while the API request is in flight.
-    tokio::spawn(async move {
-        // This client reads OPENAI_API_KEY from the environment.
-        // We loaded .env in main(), so the key can live in a local file
-        // instead of being hardcoded in the source.
-        let client = openai::Client::from_env();
-        let agent = client
-            .agent("gpt-5-mini")
-            .preamble("You are a helpful coding assistant inside a terminal UI. Keep responses concise and useful.")
-            .build();
+fn create_openai_agent(app: &App) -> rig::agent::Agent<ResponsesCompletionModel> {
+    openai::Client::from_env()
+        .agent(app.model.as_deref().expect("Model not set"))
+        .preamble("You are a helpful coding assistant inside a terminal UI. Keep responses concise and useful.")
+        .build()
+}
 
+fn spawn_agent_request(
+    prompt: String,
+    tx: Sender<AgentEvent>,
+    agent: Arc<rig::agent::Agent<ResponsesCompletionModel>>,
+    message_history: Vec<Message>,
+) {
+    tokio::spawn(async move {
         let result = agent
-            .prompt(&prompt)
+            .chat(Message::user(prompt), message_history)
             .await
             .map_err(|error| error.to_string());
 
