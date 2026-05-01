@@ -3,7 +3,7 @@ use ratatui::{prelude::*, widgets::*};
 use ratatui_textarea::TextArea;
 use rig::completion::message::{AssistantContent, Message, ToolResultContent, UserContent};
 use textwrap::wrap;
-use tui_scrollview::ScrollViewState;
+use tui_widgets::scrollview::ScrollViewState;
 
 #[allow(dead_code)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -27,6 +27,13 @@ struct HeightCache {
     height: u16,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum SelectedWidget {
+    #[default]
+    MessageHistory,
+    TextArea,
+}
+
 pub struct App {
     pub exit: bool,
     pub text_area: TextArea<'static>,
@@ -35,6 +42,9 @@ pub struct App {
     pub is_generating: bool,
     pub status: Option<String>,
     pub model: Option<String>,
+    pub selected_widget: SelectedWidget,
+    pub message_history_area: Option<Rect>,
+    pub text_area_area: Option<Rect>,
 }
 
 impl CliMessage {
@@ -160,6 +170,9 @@ impl App {
             is_generating: false,
             status: None,
             model: Some(model),
+            selected_widget: SelectedWidget::TextArea,
+            message_history_area: None,
+            text_area_area: None,
         }
     }
 
@@ -184,6 +197,21 @@ impl App {
 
     pub fn add_message(&mut self, role: Role, content: String) {
         self.messages.push(CliMessage::new(role, content));
+    }
+
+    pub fn set_selected_widget_from_position(&mut self, x: u16, y: u16) {
+        if let Some(area) = self.message_history_area {
+            if area.contains(Position::new(x, y)) {
+                self.selected_widget = SelectedWidget::MessageHistory;
+                return;
+            }
+        }
+
+        if let Some(area) = self.text_area_area {
+            if area.contains(Position::new(x, y)) {
+                self.selected_widget = SelectedWidget::TextArea;
+            }
+        }
     }
 
     pub fn message_history(&self) -> Vec<Message> {

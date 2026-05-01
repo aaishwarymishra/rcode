@@ -2,7 +2,10 @@ use crate::states::{App, MessageUtils, Role};
 use crate::theme;
 use ratatui::prelude::*;
 use ratatui::widgets::*;
-use tui_scrollview::ScrollView;
+use ratatui_textarea::WrapMode;
+use tui_widgets::scrollview::{self, ScrollView};
+
+const PADDING: u16 = 1;
 
 pub fn render(frame: &mut ratatui::Frame, app: &mut App) {
     let block = Block::bordered()
@@ -33,7 +36,8 @@ pub fn render(frame: &mut ratatui::Frame, app: &mut App) {
             .block(Block::new().padding(Padding::left(1))),
         chunks[0],
     );
-    let scroll_view = render_message_history(chunks[1].width, app, true, 1);
+    let scroll_view = render_message_history(chunks[1].width, app, true, PADDING);
+    app.message_history_area = Some(chunks[1]);
     frame.render_stateful_widget(scroll_view, chunks[1], &mut app.scroll_view_state);
 
     let status =
@@ -44,9 +48,12 @@ pub fn render(frame: &mut ratatui::Frame, app: &mut App) {
     frame.render_widget(
         Paragraph::new(status)
             .style(theme::MUTED)
-            .block(Block::new().padding(Padding::left(1))),
+            .block(Block::new().padding(Padding::horizontal(PADDING))),
         chunks[2],
     );
+
+    app.text_area.set_wrap_mode(WrapMode::WordOrGlyph);
+    app.text_area_area = Some(chunks[3]);
 
     frame.render_widget(&app.text_area, chunks[3]);
 }
@@ -55,8 +62,8 @@ fn render_message_history(width: u16, app: &mut App, has_border: bool, padding: 
     let total_height = app.get_height(width, has_border);
     let scroll_area = Size::new(width, total_height);
 
-    let mut scroll_view = ScrollView::new(scroll_area)
-        .scrollbars_visibility(tui_scrollview::ScrollbarVisibility::Never);
+    let mut scroll_view =
+        ScrollView::new(scroll_area).scrollbars_visibility(scrollview::ScrollbarVisibility::Never);
 
     let mut y = 0;
 

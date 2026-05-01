@@ -3,6 +3,7 @@ mod states;
 mod theme;
 
 use crate::states::App;
+use crate::states::SelectedWidget;
 use crossterm::event;
 use rig::client::{CompletionClient, ProviderClient};
 use rig::completion::{Chat, Message};
@@ -24,7 +25,13 @@ async fn main() -> std::io::Result<()> {
     // dotenvy reads .env and puts values into process environment variables.
     // After this, `openai::Client::from_env()` can find OPENAI_API_KEY.
     dotenvy::dotenv().ok();
-    ratatui::run(run)
+    
+    // Enable mouse capture so clicks work
+    crossterm::execute!(std::io::stdout(), crossterm::event::EnableMouseCapture)?;
+    let result = ratatui::run(run);
+    crossterm::execute!(std::io::stdout(), crossterm::event::DisableMouseCapture)?;
+    
+    result
 }
 
 fn run(terminal: &mut ratatui::DefaultTerminal) -> std::io::Result<()> {
@@ -62,9 +69,10 @@ fn handle_input(
 ) -> std::io::Result<()> {
     match event::read()? {
         event::Event::Key(key) => match key.code {
-            event::KeyCode::Down => app.scroll_view_state.scroll_down(),
-            event::KeyCode::Up => app.scroll_view_state.scroll_up(),
-            event::KeyCode::Enter => {
+            event::KeyCode::Char('c') if key.modifiers.contains(event::KeyModifiers::CONTROL) => {
+                app.exit = true;
+            }
+            event::KeyCode::Enter if matches!(app.selected_widget, SelectedWidget::TextArea) => {
                 let input = app.take_input();
                 // Ignore empty prompts and prevent overlapping requests.
                 if input.trim().is_empty() || app.is_generating {
@@ -72,6 +80,7 @@ fn handle_input(
                 }
 
                 app.add_message(states::Role::User, input.clone());
+                app.scroll_view_state.scroll_to_bottom();
                 app.is_generating = true;
                 app.status = Some("Thinking...".to_string());
 
@@ -79,21 +88,42 @@ fn handle_input(
                 let message_history = app.message_history();
                 spawn_agent_request(input, tx.clone(), agent, message_history);
             }
+            event::KeyCode::Up if matches!(app.selected_widget, SelectedWidget::MessageHistory) => {
+                app.scroll_view_state.scroll_up();
+            }
+            event::KeyCode::Down if matches!(app.selected_widget, SelectedWidget::MessageHistory) => {
+                app.scroll_view_state.scroll_down();
+            }
+            event::KeyCode::PageUp if matches!(app.selected_widget, SelectedWidget::MessageHistory) => {
+                app.scroll_view_state.scroll_page_up();
+            }
+            event::KeyCode::PageDown if matches!(app.selected_widget, SelectedWidget::MessageHistory) => {
+                app.scroll_view_state.scroll_page_down();
+            }
+            event::KeyCode::Home if matches!(app.selected_widget, SelectedWidget::MessageHistory) => {
+                app.scroll_view_state.scroll_to_top();
+            }
+            event::KeyCode::End if matches!(app.selected_widget, SelectedWidget::MessageHistory) => {
+                app.scroll_view_state.scroll_to_bottom();
+            }
             _ => {
-                if key.modifiers.contains(event::KeyModifiers::CONTROL)
-                    && key.code == event::KeyCode::Char('c')
-                {
-                    app.exit = true;
-                } else {
+                if matches!(app.selected_widget, SelectedWidget::TextArea) {
                     app.text_area.input(key);
                 }
             }
         },
-        event::Event::Mouse(mouse) => match mouse.kind {
-            event::MouseEventKind::ScrollDown => app.scroll_view_state.scroll_down(),
-            event::MouseEventKind::ScrollUp => app.scroll_view_state.scroll_up(),
-            _ => {}
-        },
+        event::Event::Mouse(mouse) => {
+            if let event::MouseEventKind::Down(event::MouseButton::Left) = mouse.kind {
+                app.set_selected_widget_from_position(mouse.column, mouse.row);
+            }
+
+            // Always allow scrolling the scrollview with the mouse wheel regardless of focus
+            match mouse.kind {
+                event::MouseEventKind::ScrollDown => app.scroll_view_state.scroll_down(),
+                event::MouseEventKind::ScrollUp => app.scroll_view_state.scroll_up(),
+                _ => {}
+            }
+        }
 
         _ => {}
     }
@@ -107,6 +137,7 @@ fn drain_agent_events(app: &mut App, rx: &Receiver<AgentEvent>) {
                 app.add_message(states::Role::Agent, response);
                 app.is_generating = false;
                 app.status = None;
+                app.scroll_view_state.scroll_to_bottom();
             }
             AgentEvent::Error(error) => {
                 app.status = Some(format!("Agent error: {error}"));
