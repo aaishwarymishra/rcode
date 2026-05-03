@@ -1,43 +1,32 @@
-mod render;
-mod states;
-mod theme;
-
-use crate::states::App;
-use crate::states::SelectedWidget;
 use crossterm::event;
-use rig::client::{CompletionClient, ProviderClient};
-use rig::completion::{Chat, Message};
-use rig::providers::openai;
-use rig::providers::openai::responses_api::ResponsesCompletionModel;
+use rcode::agent::OpenAiAgent;
+use rcode::agent::{AgentEvent, create_openai_agent, spawn_agent_request};
+use rcode::app::{App, Role, SelectedWidget};
+use rcode::ui;
 use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::time::Duration;
-
-// A small message enum lets the background worker talk back to the UI thread
-// without sharing mutable state across threads.
-enum AgentEvent {
-    Response(String),
-    Error(String),
-}
 
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
     // dotenvy reads .env and puts values into process environment variables.
     // After this, `openai::Client::from_env()` can find OPENAI_API_KEY.
     dotenvy::dotenv().ok();
-    
+
     // Enable mouse capture so clicks work
     crossterm::execute!(std::io::stdout(), crossterm::event::EnableMouseCapture)?;
     let result = ratatui::run(run);
     crossterm::execute!(std::io::stdout(), crossterm::event::DisableMouseCapture)?;
-    
+
     result
 }
 
 fn run(terminal: &mut ratatui::DefaultTerminal) -> std::io::Result<()> {
     let mut app = App::new("gpt-5-mini".to_string());
     let (tx, rx) = mpsc::channel::<AgentEvent>();
-    let agent = Arc::new(create_openai_agent(&app));
+    let agent = Arc::new(create_openai_agent(
+        app.model.as_deref().expect("Model not set"),
+    ));
 
     loop {
         // Poll the channel first so any finished agent reply shows up before
@@ -46,7 +35,7 @@ fn run(terminal: &mut ratatui::DefaultTerminal) -> std::io::Result<()> {
 
         // Draw only the current app state. The UI stays responsive because
         // the network request happens in a background Tokio task.
-        terminal.draw(|frame| render::render(frame, &mut app))?;
+        terminal.draw(|frame| ui::render(frame, &mut app))?;
 
         // event::poll makes input non-blocking for a short period.
         // That gives us a chance to redraw the screen even when the user is idle.
@@ -65,7 +54,7 @@ fn run(terminal: &mut ratatui::DefaultTerminal) -> std::io::Result<()> {
 fn handle_input(
     app: &mut App,
     tx: &Sender<AgentEvent>,
-    agent: Arc<rig::agent::Agent<ResponsesCompletionModel>>,
+    agent: Arc<OpenAiAgent>,
 ) -> std::io::Result<()> {
     match event::read()? {
         event::Event::Key(key) => match key.code {
@@ -79,7 +68,7 @@ fn handle_input(
                     return Ok(());
                 }
 
-                app.add_message(states::Role::User, input.clone());
+                app.add_message(Role::User, input.clone());
                 app.scroll_view_state.scroll_to_bottom();
                 app.is_generating = true;
                 app.status = Some("Thinking...".to_string());
@@ -91,19 +80,29 @@ fn handle_input(
             event::KeyCode::Up if matches!(app.selected_widget, SelectedWidget::MessageHistory) => {
                 app.scroll_view_state.scroll_up();
             }
-            event::KeyCode::Down if matches!(app.selected_widget, SelectedWidget::MessageHistory) => {
+            event::KeyCode::Down
+                if matches!(app.selected_widget, SelectedWidget::MessageHistory) =>
+            {
                 app.scroll_view_state.scroll_down();
             }
-            event::KeyCode::PageUp if matches!(app.selected_widget, SelectedWidget::MessageHistory) => {
+            event::KeyCode::PageUp
+                if matches!(app.selected_widget, SelectedWidget::MessageHistory) =>
+            {
                 app.scroll_view_state.scroll_page_up();
             }
-            event::KeyCode::PageDown if matches!(app.selected_widget, SelectedWidget::MessageHistory) => {
+            event::KeyCode::PageDown
+                if matches!(app.selected_widget, SelectedWidget::MessageHistory) =>
+            {
                 app.scroll_view_state.scroll_page_down();
             }
-            event::KeyCode::Home if matches!(app.selected_widget, SelectedWidget::MessageHistory) => {
+            event::KeyCode::Home
+                if matches!(app.selected_widget, SelectedWidget::MessageHistory) =>
+            {
                 app.scroll_view_state.scroll_to_top();
             }
-            event::KeyCode::End if matches!(app.selected_widget, SelectedWidget::MessageHistory) => {
+            event::KeyCode::End
+                if matches!(app.selected_widget, SelectedWidget::MessageHistory) =>
+            {
                 app.scroll_view_state.scroll_to_bottom();
             }
             _ => {
@@ -134,7 +133,7 @@ fn drain_agent_events(app: &mut App, rx: &Receiver<AgentEvent>) {
     while let Ok(event) = rx.try_recv() {
         match event {
             AgentEvent::Response(response) => {
-                app.add_message(states::Role::Agent, response);
+                app.add_message(Role::Agent, response);
                 app.is_generating = false;
                 app.status = None;
                 app.scroll_view_state.scroll_to_bottom();
@@ -145,30 +144,4 @@ fn drain_agent_events(app: &mut App, rx: &Receiver<AgentEvent>) {
             }
         }
     }
-}
-
-fn create_openai_agent(app: &App) -> rig::agent::Agent<ResponsesCompletionModel> {
-    openai::Client::from_env()
-        .agent(app.model.as_deref().expect("Model not set"))
-        .preamble("You are a helpful coding assistant inside a terminal UI. Keep responses concise and useful.")
-        .build()
-}
-
-fn spawn_agent_request(
-    prompt: String,
-    tx: Sender<AgentEvent>,
-    agent: Arc<rig::agent::Agent<ResponsesCompletionModel>>,
-    message_history: Vec<Message>,
-) {
-    tokio::spawn(async move {
-        let result = agent
-            .chat(Message::user(prompt), message_history)
-            .await
-            .map_err(|error| error.to_string());
-
-        let _ = match result {
-            Ok(response) => tx.send(AgentEvent::Response(response)),
-            Err(error) => tx.send(AgentEvent::Error(error)),
-        };
-    });
 }
