@@ -4,7 +4,12 @@ use ratatui::prelude::*;
 use ratatui::widgets::*;
 use tui_widgets::scrollview::{self, ScrollView};
 
-pub fn render_message_history(width: u16, app: &mut App, has_border: bool, padding: u16) -> ScrollView {
+pub fn render_message_history(
+    width: u16,
+    app: &mut App,
+    has_border: bool,
+    padding: u16,
+) -> ScrollView {
     let total_height = app.get_height(width, has_border);
     let scroll_area = Size::new(width, total_height);
 
@@ -29,9 +34,8 @@ pub fn render_message_history(width: u16, app: &mut App, has_border: bool, paddi
                 .border_type(BorderType::Rounded)
                 .borders(Borders::ALL)
                 .border_style(accent)
-                .title(label)
-                .title_alignment(Alignment::Left)
-                .title_style(Style::default().fg(accent).bold());
+                .title(label.fg(accent).bold())
+                .title_alignment(Alignment::Left);
         }
 
         let content = message.get_content();
