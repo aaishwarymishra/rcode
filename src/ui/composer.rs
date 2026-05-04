@@ -5,10 +5,10 @@ use ratatui::widgets::*;
 use ratatui_textarea::WrapMode;
 
 pub fn render_status(frame: &mut ratatui::Frame, app: &App, area: Rect, padding: u16) {
-    let status = app
-        .status
-        .as_deref()
-        .unwrap_or(if app.is_generating { "Thinking..." } else { "" });
+    let status =
+        app.status
+            .as_deref()
+            .unwrap_or(if app.is_generating { "Thinking..." } else { "" });
 
     frame.render_widget(
         Paragraph::new(status)

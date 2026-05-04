@@ -69,7 +69,7 @@ fn handle_input(
                 }
 
                 app.add_message(Role::User, input.clone());
-                app.scroll_view_state.scroll_to_bottom();
+                app.scroll_offset = u16::MAX;
                 app.is_generating = true;
                 app.status = Some("Thinking...".to_string());
 
@@ -78,32 +78,36 @@ fn handle_input(
                 spawn_agent_request(input, tx.clone(), agent, message_history);
             }
             event::KeyCode::Up if matches!(app.selected_widget, SelectedWidget::MessageHistory) => {
-                app.scroll_view_state.scroll_up();
+                app.scroll_offset = app.scroll_offset.saturating_sub(1);
             }
             event::KeyCode::Down
                 if matches!(app.selected_widget, SelectedWidget::MessageHistory) =>
             {
-                app.scroll_view_state.scroll_down();
+                let max_scroll = app.get_max_scroll();
+                if app.scroll_offset < max_scroll {
+                    app.scroll_offset = app.scroll_offset.saturating_add(1);
+                }
             }
             event::KeyCode::PageUp
                 if matches!(app.selected_widget, SelectedWidget::MessageHistory) =>
             {
-                app.scroll_view_state.scroll_page_up();
+                app.scroll_offset = app.scroll_offset.saturating_sub(10);
             }
             event::KeyCode::PageDown
                 if matches!(app.selected_widget, SelectedWidget::MessageHistory) =>
             {
-                app.scroll_view_state.scroll_page_down();
+                let max_scroll = app.get_max_scroll();
+                app.scroll_offset = app.scroll_offset.saturating_add(10).min(max_scroll);
             }
             event::KeyCode::Home
                 if matches!(app.selected_widget, SelectedWidget::MessageHistory) =>
             {
-                app.scroll_view_state.scroll_to_top();
+                app.scroll_offset = 0;
             }
             event::KeyCode::End
                 if matches!(app.selected_widget, SelectedWidget::MessageHistory) =>
             {
-                app.scroll_view_state.scroll_to_bottom();
+                app.scroll_offset = app.get_max_scroll();
             }
             _ => {
                 if matches!(app.selected_widget, SelectedWidget::TextArea) {
@@ -118,8 +122,15 @@ fn handle_input(
 
             // Always allow scrolling the scrollview with the mouse wheel regardless of focus
             match mouse.kind {
-                event::MouseEventKind::ScrollDown => app.scroll_view_state.scroll_down(),
-                event::MouseEventKind::ScrollUp => app.scroll_view_state.scroll_up(),
+                event::MouseEventKind::ScrollDown => {
+                    app.scroll_offset = app
+                        .scroll_offset
+                        .saturating_add(3)
+                        .min(app.get_max_scroll());
+                }
+                event::MouseEventKind::ScrollUp => {
+                    app.scroll_offset = app.scroll_offset.saturating_sub(3)
+                }
                 _ => {}
             }
         }
@@ -136,7 +147,7 @@ fn drain_agent_events(app: &mut App, rx: &Receiver<AgentEvent>) {
                 app.add_message(Role::Agent, response);
                 app.is_generating = false;
                 app.status = None;
-                app.scroll_view_state.scroll_to_bottom();
+                app.scroll_offset = u16::MAX;
             }
             AgentEvent::Error(error) => {
                 app.status = Some(format!("Agent error: {error}"));

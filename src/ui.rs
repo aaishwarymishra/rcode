@@ -38,9 +38,20 @@ pub fn render(frame: &mut ratatui::Frame, app: &mut App) {
         chunks[0],
     );
 
-    let scroll_view = message_history::render_message_history(chunks[1].width, app, true, PADDING);
     app.message_history_area = Some(chunks[1]);
-    frame.render_stateful_widget(scroll_view, chunks[1], &mut app.scroll_view_state);
+    app.update_cache(chunks[1].width);
+
+    // Clamp scroll offset to max scroll, auto-scrolling to bottom if overshot
+    app.scroll_offset = app.scroll_offset.min(app.get_max_scroll());
+    let scroll_offset = app.scroll_offset;
+
+    let message_history = message_history::render_message_history(
+        app,
+        chunks[1].width,
+        chunks[1].height,
+        scroll_offset,
+    );
+    frame.render_widget(message_history, chunks[1]);
 
     composer::render_status(frame, app, chunks[2], PADDING);
     composer::render_text_area(frame, app, chunks[3]);

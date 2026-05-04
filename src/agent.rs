@@ -33,7 +33,10 @@ pub fn spawn_agent_request(
 
         let _ = match result {
             Ok(response) => tx.send(AgentEvent::Response(response)),
-            Err(error) => tx.send(AgentEvent::Error(error)),
+            Err(error) => {
+                println!("Error in agent request: {}", error);
+                tx.send(AgentEvent::Error(error))
+            }
         };
     });
 }
