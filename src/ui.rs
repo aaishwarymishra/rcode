@@ -45,12 +45,7 @@ pub fn render(frame: &mut ratatui::Frame, app: &mut App) {
     app.scroll_offset = app.scroll_offset.min(app.get_max_scroll());
     let scroll_offset = app.scroll_offset;
 
-    let message_history = message_history::render_message_history(
-        app,
-        chunks[1].width,
-        chunks[1].height,
-        scroll_offset,
-    );
+    let message_history = message_history::render_message_history(app, scroll_offset);
     frame.render_widget(message_history, chunks[1]);
 
     composer::render_status(frame, app, chunks[2], PADDING);

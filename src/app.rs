@@ -24,7 +24,7 @@ pub struct App {
     pub selected_widget: SelectedWidget,
     pub message_history_area: Option<Rect>,
     pub text_area_area: Option<Rect>,
-    pub cached_lines: Vec<ratatui::text::Line<'static>>,
+    pub cached_text: ratatui::text::Text<'static>,
     pub cached_width: u16,
     pub cached_msg_count: usize,
 }
@@ -42,7 +42,7 @@ impl App {
             selected_widget: SelectedWidget::TextArea,
             message_history_area: None,
             text_area_area: None,
-            cached_lines: Vec::new(),
+            cached_text: ratatui::text::Text::default(),
             cached_width: 0,
             cached_msg_count: 0,
         }
@@ -100,7 +100,7 @@ impl App {
     }
 
     pub fn get_height(&self) -> u16 {
-        self.cached_lines.len() as u16
+        self.cached_text.height() as u16
     }
 
     pub fn update_cache(&mut self, width: u16) {
@@ -130,7 +130,7 @@ impl App {
             text_lines.push(ratatui::text::Line::from(""));
         }
 
-        self.cached_lines = text_lines;
+        self.cached_text = ratatui::text::Text::from(text_lines);
         self.cached_width = width;
         self.cached_msg_count = self.messages.len();
     }
