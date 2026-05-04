@@ -5,6 +5,8 @@ use rig::providers::openai::responses_api::ResponsesCompletionModel;
 use std::sync::Arc;
 use std::sync::mpsc::Sender;
 
+pub mod file_tool;
+
 pub enum AgentEvent {
     Response(String),
     Error(String),
