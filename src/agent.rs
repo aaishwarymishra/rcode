@@ -18,6 +18,9 @@ pub fn create_openai_agent(model: &str) -> OpenAiAgent {
     openai::Client::from_env()
         .agent(model)
         .preamble("You are a helpful coding assistant inside a terminal UI. Keep responses concise and useful.")
+        .tool(file_tool::ListFiles)
+        .tool(file_tool::SearchFile)
+        .tool(file_tool::GetLines)
         .build()
 }
 
