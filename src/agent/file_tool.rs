@@ -48,7 +48,7 @@ impl Tool for ListFiles {
                         },
                         "include_hidden": {
                             "type": "boolean",
-                            "description": "Whether to include hidden files (those starting with a dot).",
+                            "description": "Whether to include hidden files (those starting with a dot like .venv .git etc). Only show hidden files if explicitly requested.",
                             "default": false
                         },
                         "include_gitignore": {

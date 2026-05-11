@@ -1,7 +1,7 @@
 use rig::client::{CompletionClient, ProviderClient};
 use rig::completion::{Chat, Message};
-use rig::providers::openai;
-use rig::providers::openai::responses_api::ResponsesCompletionModel;
+use rig::providers::mistral;
+use rig::providers::mistral::CompletionModel;
 use std::sync::Arc;
 use std::sync::mpsc::Sender;
 
@@ -12,12 +12,13 @@ pub enum AgentEvent {
     Error(String),
 }
 
-pub type OpenAiAgent = rig::agent::Agent<ResponsesCompletionModel>;
+pub type MistralAgent = rig::agent::Agent<CompletionModel>;
 
-pub fn create_openai_agent(model: &str) -> OpenAiAgent {
-    openai::Client::from_env()
+pub fn create_mistral_agent(model: &str) -> MistralAgent {
+    mistral::Client::from_env()
         .agent(model)
         .preamble("You are a helpful coding assistant inside a terminal UI. Keep responses concise and useful.")
+        .default_max_turns(10)
         .tool(file_tool::ListFiles)
         .tool(file_tool::SearchFile)
         .tool(file_tool::GetLines)
@@ -27,7 +28,7 @@ pub fn create_openai_agent(model: &str) -> OpenAiAgent {
 pub fn spawn_agent_request(
     prompt: String,
     tx: Sender<AgentEvent>,
-    agent: Arc<OpenAiAgent>,
+    agent: Arc<MistralAgent>,
     message_history: Vec<Message>,
 ) {
     tokio::spawn(async move {
