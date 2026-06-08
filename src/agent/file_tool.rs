@@ -27,6 +27,24 @@ pub struct GetLinesArgs {
     pub end: usize,
 }
 
+#[derive(Deserialize, Serialize, JsonSchema)]
+pub struct PatchFileArgs {
+    pub path: String,
+    pub line_num: usize,
+    pub new_content: String,
+}
+
+#[derive(Deserialize, Serialize, JsonSchema)]
+pub struct ReadFileArgs {
+    pub path: String,
+}
+
+#[derive(Deserialize, Serialize, JsonSchema)]
+pub struct WriteFileArgs {
+    pub path: String,
+    pub content: String,
+}
+
 pub struct ListFiles;
 impl Tool for ListFiles {
     const NAME: &'static str = "list_files";
@@ -145,5 +163,74 @@ impl Tool for GetLines {
             }
         }
         Ok(results.join("\n"))
+    }
+}
+
+pub struct ReadFile;
+impl Tool for ReadFile {
+    const NAME: &'static str = "read_file";
+    type Args = ReadFileArgs;
+    type Output = String;
+    type Error = std::io::Error;
+    async fn definition(&self, _prompt: String) -> ToolDefinition {
+        ToolDefinition {
+            name: Self::NAME.to_string(),
+            description: "Read the entire content of a file.".to_string(),
+            parameters: serde_json::to_value(schemars::schema_for!(Self::Args)).unwrap(),
+        }
+    }
+    async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
+        std::fs::read_to_string(args.path)
+    }
+}
+
+pub struct PatchFile;
+impl Tool for PatchFile {
+    const NAME: &'static str = "patch_file";
+    type Args = PatchFileArgs;
+    type Output = String;
+    type Error = std::io::Error;
+    async fn definition(&self, _prompt: String) -> ToolDefinition {
+        ToolDefinition {
+            name: Self::NAME.to_string(),
+            description: "Replace a specific line in a file with new content.".to_string(),
+            parameters: serde_json::to_value(schemars::schema_for!(Self::Args)).unwrap(),
+        }
+    }
+    async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
+        let file = File::open(&args.path)?;
+        let reader = BufReader::new(file);
+        let mut lines: Vec<String> = reader.lines().collect::<Result<_, _>>()?;
+
+        if args.line_num == 0 || args.line_num > lines.len() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "Line number out of range",
+            ));
+        }
+
+        lines[args.line_num - 1] = args.new_content;
+
+        std::fs::write(args.path, lines.join("\n"))?;
+        Ok("Line updated successfully.".to_string())
+    }
+}
+
+pub struct WriteFile;
+impl Tool for WriteFile {
+    const NAME: &'static str = "write_file";
+    type Args = WriteFileArgs;
+    type Output = String;
+    type Error = std::io::Error;
+    async fn definition(&self, _prompt: String) -> ToolDefinition {
+        ToolDefinition {
+            name: Self::NAME.to_string(),
+            description: "Write content to a file, replacing it if it already exists.".to_string(),
+            parameters: serde_json::to_value(schemars::schema_for!(Self::Args)).unwrap(),
+        }
+    }
+    async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
+        std::fs::write(args.path, args.content)?;
+        Ok("File written successfully.".to_string())
     }
 }

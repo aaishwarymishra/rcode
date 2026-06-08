@@ -1,6 +1,6 @@
 use crossterm::event;
-use rcode::agent::MistralAgent;
-use rcode::agent::{AgentEvent, create_mistral_agent, spawn_agent_request};
+use rcode::agent::DeepSeekAgent;
+use rcode::agent::{AgentEvent, create_deepseek_agent, spawn_agent_request};
 use rcode::app::{App, Role, SelectedWidget};
 use rcode::ui;
 use std::sync::Arc;
@@ -22,9 +22,9 @@ async fn main() -> std::io::Result<()> {
 }
 
 fn run(terminal: &mut ratatui::DefaultTerminal) -> std::io::Result<()> {
-    let mut app = App::new("mistral-small-latest".to_string());
+    let mut app = App::new("deepseek-v4-flash".to_string());
     let (tx, rx) = mpsc::channel::<AgentEvent>();
-    let agent = Arc::new(create_mistral_agent(
+    let agent = Arc::new(create_deepseek_agent(
         app.model.as_deref().expect("Model not set"),
     ));
 
@@ -54,7 +54,7 @@ fn run(terminal: &mut ratatui::DefaultTerminal) -> std::io::Result<()> {
 fn handle_input(
     app: &mut App,
     tx: &Sender<AgentEvent>,
-    agent: Arc<MistralAgent>,
+    agent: Arc<DeepSeekAgent>,
 ) -> std::io::Result<()> {
     match event::read()? {
         event::Event::Key(key) => match key.code {
